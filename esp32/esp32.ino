@@ -21,7 +21,8 @@
 const char *ntpServer = "pool.ntp.org";
 
 // Define a payload struct
-struct SensorData {
+struct SensorData
+{
   float airTemp;
   float humidity;
   float contactTemp;
@@ -45,7 +46,8 @@ String payloadString;
 
 void setup()
 {
-
+  // GPIO12 as output for transistor
+  pinMode(12, OUTPUT);
   Serial.begin(115200);
   Serial.println("Smart Farm ESP32 Client.");
   Serial2.begin(115200); // Initialize UART for ESP32 <-> Arduino communication
@@ -61,8 +63,7 @@ void setup()
     connectToWiFi(savedSSID, savedPassword);
     setupNTP();
     connectToWebSocket();
-  }
-  else
+  } else
   {
     setupWiFiAP(); // Start the configuration portal
   }
@@ -71,29 +72,51 @@ void setup()
 
 void loop()
 {
-  // Arduino is connected to ESP32 via UART, so we can send data from Arduino to WebSocket server via ESP32
-  if (Serial2.available())
+  String data = Serial2.readStringUntil('\n');
+  if (ws.isConnected())
   {
-    String data = Serial2.readStringUntil('\n');
-    ws.sendTXT(data);
-    Serial.println("Received data:");
-    Serial.println(data);
+    // Arduino is connected to ESP32 via UART, so we can send data from Arduino to WebSocket server via ESP32
+    // If data is empty then don't send anything
+    if (data != "")
+    {
+      ws.sendTXT(data);
+      Serial.println("Received data:");
+      Serial.println(data);
+    }
     // Send back current time to Arduino
     String currentTime = "currTime:" + String(timeClient.getEpochTime());
     Serial2.println(currentTime);
+    ws.loop();
   }
-  ws.loop();
+  else
+  {
+    Serial.println("WebSocket not connected, falling back to offline mode");
+    // If WebSocket is not connected, then we are in offline mode
+    // we have to calculate the time difference between the last time we received data from the server and the current time
+    
+  }
 }
 
 void connectToWiFi(const String &ssid, const String &password)
 {
   WiFi.begin(ssid.c_str(), password.c_str());
+  int attempt = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(1000);
     Serial.println("Connecting to WiFi...");
+    if (attempt > 10)
+    {
+      Serial.println("Connection failed, starting AP mode.");
+      setupWiFiAP();
+      break;
+    }
+    attempt++;
   }
-  Serial.println("Connected to WiFi");
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("Connected to WiFi");
+  }
 }
 
 void setupNTP()
@@ -154,7 +177,6 @@ void connectToWebSocket()
   {
     Serial.println("Connected to WebSocket");
   }
-
 }
 
 void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
@@ -174,25 +196,49 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
       pongServer();
       break;
     }
-    else if (payloadString == "$IDENTIFICATION_REQUEST") {
+    else if (payloadString == "$IDENTIFICATION_REQUEST")
+    {
       ws.sendTXT("$IDENTIFY ESP32");
       break;
     }
     Serial.printf("[WSc] Received text: %s\n", payloadString);
     char strBuf;
+    if (payloadString == "A")
+    {
+      Serial.println("Received A");
+      Serial2.println("A");
+      digitalWrite(12, HIGH);
+    }
+    else if (payloadString == "B")
+    {
+      Serial.println("Received B");
+      Serial2.println("B");
+      digitalWrite(12, LOW);
+    }
 
-    relayBackData((char *)payload);
     break;
   case WStype_BIN:
     Serial.printf("[WSc] Received binary data of length %u\n", length);
-    // Convert them to string
-    String resultString = "";
+    // If payload is 0x1, send 0 to Serial 2, if payload is 0x2, send 1 to Serial 2
+    Serial.println('Received binary data');
     for (int i = 0; i < length; i++)
     {
-      resultString += (char)payload[i];
+      Serial.print("0x");
+      Serial.print(payload[i], HEX);
+      Serial.print(" ");
     }
-    Serial.println(resultString);
-    Serial2.println(resultString);
+
+    if (payload[0] == 0x1)
+    {
+      Serial.print("Received 0x1");
+      Serial2.println("0");
+    }
+    else if (payload[0] == 0x2)
+    {
+      Serial.print("Received 0x2");
+      Serial2.println("1");
+    }
+
     break;
   }
 }
@@ -203,7 +249,7 @@ void pongServer()
   ws.sendTXT("$CLIENTPONG");
 }
 
-void relayBackData(char *data)
+void relayBackData(char *data, char waterState)
 {
   // Relay back data from WebSocket along with current time from NTP server to Arduino
   String dataString = String(data);
@@ -215,17 +261,4 @@ void relayBackData(char *data)
   JSONString += "}";
 
   Serial2.println(JSONString);
-}
-
-SensorData decodeData(byte data) {
-  // Decode byte into floats
-  SensorData result;
-  result.soilMoisture = (float) (data & 0xFF) / 100.0;
-  data >>= 8;
-  result.contactTemp = (float) (data & 0xFF) / 100.0;
-  data >>= 8;
-  result.humidity = (float) (data & 0xFF) / 100.0;
-  data >>= 8;
-  result.airTemp = (float) (data & 0xFF) / 100.0;
-  return result;
 }
