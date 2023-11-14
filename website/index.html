@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+</head>
+
+<body>
+  <nav>
+    <div class="nav-wrapper teal lighten-2">
+      <a href="#" class="brand-logo center">Smart farm dashboard</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h2 class="teal-text text-darken-2">Sensors Data</h2>
+    <div class="row">
+      <div class="col s12 m6 l4">
+        <div class="card">
+          <div class="card-content">
+            <span class="card-title">Air Temperature</span>
+            <p><span id="airTemp"></span> &deg;C</p>
+          </div>
+        </div>
+      </div>
+      <div class="col s12 m6 l4">
+        <div class="card">
+          <div class="card-content">
+            <span class="card-title">Soil Temperature</span>
+            <p><span id="soilTemp"></span> &deg;C</p>
+          </div>
+        </div>
+      </div>
+      <div class="col s12 m6 l4">
+        <div class="card">
+          <div class="card-content">
+            <span class="card-title">Soil Moisture</span>
+            <p><span id="soilHumidity"></span> %</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <a class="waves-effect waves-light btn-large teal darken-2" id="wateringButton">Start Watering</a>
+    <a class="waves-effect waves-light btn-large teal darken-2" id="forceCheck">Force weather check</a>
+  </div>
+
+  <div class="container">
+    <!-- <canvas id="chart" width="400" height="200"></canvas> -->
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    const airTempElem = document.getElementById('airTemp');
+    const soilTempElem = document.getElementById('soilTemp');
+    const soilHumidityElem = document.getElementById('soilHumidity');
+    const wateringButton = document.getElementById('wateringButton');
+
+    // Create a WebSocket connection to the provided API
+    // const ws = new WebSocket('ws://api.finqlfrontier.net/api');
+    // it doesn't work, so we're gonna replace it with polling
+
+    // Poll the API every 10 seconds
+    function getData() {
+      fetch('http://api.finqlfrontier.net/api')
+        .then((response) => {
+          try {
+            return response.json();
+          } catch (error) {
+            alert("Data not available, please try again later");
+          }
+        })
+        .then((d) => {
+          // Add these debug statements
+          console.log("Received data:", d);
+
+          if (d.soilMoisture == 0.1) d.soilMoisture = 0;
+
+          airTempElem.innerText = d.airTemp;
+          soilTempElem.innerText = d.contactTemp;
+          soilHumidityElem.innerText = ((d.soilMoisture)).toFixed(2);
+
+          // Add the new data to the chart
+          /*
+          chart.data.labels.push(d.timestamp);
+          chart.data.datasets[0].data.push(d.airTemp);
+          chart.data.datasets[1].data.push(d.contactTemp);
+          chart.data.datasets[2].data.push(d.soilMoisture);
+
+          // Add these debug statements
+          console.log("Updated chart labels length:", chart.data.labels.length);
+          console.log("Updated chart data length:", chart.data.datasets[0].data.length);
+
+          chart.update();
+          */
+        });
+    }
+
+    setInterval(getData, 10000);
+    getData();
+
+    wateringButton.addEventListener('click', () => {
+      // Send a POST request to the watering API
+      fetch('http://api.finqlfrontier.net/water', { method: 'GET' });
+    });
+
+    forceCheck.addEventListener('click', () => {
+      // Send a POST request to the watering API
+      fetch('http://api.finqlfrontier.net/forceCheckWeather', { method: 'GET' });
+    });
+
+    // Initialize Materialize CSS components
+    M.AutoInit();
+  </script>
+</body>
+
+</html>
