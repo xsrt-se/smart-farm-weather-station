@@ -15,13 +15,18 @@ void setup() {
   Serial.begin(115200);
   // MOSFET to control the pump
   pinMode(3, OUTPUT);
+  pinMode(2, INPUT);
 }
 
 void loop() {
-  // Scan serial for incoming data then parse JSON
-  if (Serial.available()) {
-    String data = Serial.readStringUntil('\n');
-    processData(data);
+  // If 2 is HIGH, then start watering
+  if (digitalRead(2) == HIGH) {
+    digitalWrite(3, HIGH);
+    watering = true;
+    wateringTime = millis();
+  } else if (digitalRead(2) == LOW) {
+    digitalWrite(3, LOW);
+    watering = false;
   }
 
   // Read sensors
@@ -48,22 +53,19 @@ void loop() {
   Serial.println(JSONString);
 }
 
-void processData(String data) {
-  // Data is plain text, either "startWatering" or "stopWatering"
-  if (data.equals("startWatering")) {
-    watering = true;
+void processData(char data) {
+  Serial.println(data);
+  if (data == 'A') {
+    // Turn on the pump
     digitalWrite(3, HIGH);
-    Serial.println('Watering started.');
-  } else if (data.equals("stopWatering")) {
-    watering = false;
+    watering = true;
+    wateringTime = millis();
+  } else if (data == 'A') {
+    // Turn off the pump
     digitalWrite(3, LOW);
-    Serial.println('Watering stopped.');
-  } else if (data.substring(0, 9) == "currTime:") {
-    // If data starts with currTime: then parse the rest of the string as an int and set currentTime to that value
-      currentTime = data.substring(9).toInt();
-  } else {
-    return;
-  }
+    watering = false;
+  
+}
 }
 
 byte castData(float airTemp, float humidity, float contactTemp, float soilMoisture) {
